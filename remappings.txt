@@ -1,0 +1,6 @@
+halmos-helpers-lib/=lib/halmos-helpers-lib/src/
+forge-std/=lib/forge-std/src/
+halmos-cheatcodes/=lib/halmos-cheatcodes/src/
+solmate/=lib/solmate/src/
+solady/=lib/solady/src/
+@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts
