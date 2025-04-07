@@ -2,49 +2,49 @@
 
 pragma solidity ^0.8.25;
 
-import "halmos-helpers-lib/GlobalStorage.sol";
-import "halmos-helpers-lib/SymbolicHandler.sol";
+import "halmos-helpers-lib/HalmosHelpers.sol";
 import "./TrivialTarget.sol";
 
-contract Trivial is Test {
-    address configurer = address(0xcafe0000);
-    address actor = address(0xcafe0001);
+contract Trivial is Test, HalmosHelpers {
+    address deployer = address(0xcafe0000);
 
     TrivialTarget target;
-    GlobalStorage glob;
-    SymbolicHandler handler;
+    SymbolicActor[] actors;
 
     function setUp() public {
-        startHoax(configurer, 1 << 80);
+        startHoax(deployer, 1 << 80);
         target = new TrivialTarget();
-        glob = new GlobalStorage(configurer);
-        glob.add_addr_name_pair(address(target), "TrivialTarget");
-        handler = new SymbolicHandler(actor, glob, configurer);
+        vm.stopPrank();
+
+        vm.startPrank(getConfigurer());
+        halmosHelpersInitialize();
+        halmosHelpersRegisterTargetAddress(address(target), "TrivialTarget");
+        actors = halmosHelpersGetSymbolicActorArray(1);
+
         vm.stopPrank();
     }
 
     function check_TrivialAll() external {
-        vm.startPrank(actor);
-        handler.execute_symbolically_all();
+        halmosHelpersSymbolicBatchStartPrank(actors);
+        executeSymbolicallyAllTargets("check_TrivialAll");
+        vm.stopPrank();
 
         assert(target.goal() != true);
-        vm.stopPrank();
     }
 
     function check_TrivialTarget() external {
-        vm.startPrank(actor);
-        handler.execute_symbolically_target(address(target));
+        vm.startPrank(address(actors[0]));
+        executeSymbolicallyTarget(address(target));
+        vm.stopPrank();
 
         assert(target.goal() != true);
-        vm.stopPrank();
     }
 
     function check_TrivialTargetData() external {
-        vm.startPrank(actor);
-        bytes memory data = abi.encodeWithSignature("trivial_function()");
-        handler.execute_symbolically_target_data(address(target), data);
+        vm.startPrank(address(actors[0]));
+        target.trivial_function();
+        vm.stopPrank();
 
         assert(target.goal() != true);
-        vm.stopPrank();
     }
 }

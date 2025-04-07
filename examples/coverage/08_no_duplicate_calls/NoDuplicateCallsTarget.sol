@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.25;
 
-contract OptimisticTarget {
+contract NoDuplicateCallsTarget {
     bool public goal;
     uint8 private counter;
 

@@ -2,52 +2,53 @@
 
 pragma solidity ^0.8.25;
 
-import "halmos-helpers-lib/GlobalStorage.sol";
-import "halmos-helpers-lib/SymbolicHandler.sol";
+import "halmos-helpers-lib/HalmosHelpers.sol";
 import "./BannedFunctionTarget.sol";
 
-contract BannedFunction is Test {
-    address configurer = address(0xcafe0000);
-    address actor = address(0xcafe0001);
+contract BannedFunction is Test, HalmosHelpers {
+    address deployer = address(0xcafe0000);
 
     BannedFunctionTarget target;
-    GlobalStorage glob;
-    SymbolicHandler handler;
+    SymbolicActor[] actors;
 
     function setUp() public {
-        startHoax(configurer, 1 << 80);
+        startHoax(deployer, 1 << 80);
         target = new BannedFunctionTarget();
-        glob = new GlobalStorage(configurer);
-        glob.add_addr_name_pair(address(target), "BannedFunctionTarget");
-        handler = new SymbolicHandler(actor, glob, configurer);
+        vm.stopPrank();
+
+        vm.startPrank(getConfigurer());
+        halmosHelpersInitialize();
+        halmosHelpersRegisterTargetAddress(address(target), "BannedFunctionTarget");
+        actors = halmosHelpersGetSymbolicActorArray(1);
         vm.stopPrank();
     }
 
     function check_BannedFunction_disabled() external {
-        vm.startPrank(actor);
-        handler.execute_symbolically_all();
-        handler.execute_symbolically_all();
-        handler.execute_symbolically_all();
-        handler.execute_symbolically_all();
-        handler.execute_symbolically_all();
-        assert(target.goal() != true);
+        vm.startPrank(address(actors[0]));
+        executeSymbolicallyAllTargets("check_BannedFunction_disabled_1");
+        executeSymbolicallyAllTargets("check_BannedFunction_disabled_2");
+        executeSymbolicallyAllTargets("check_BannedFunction_disabled_3");
+        executeSymbolicallyAllTargets("check_BannedFunction_disabled_4");
+        executeSymbolicallyAllTargets("check_BannedFunction_disabled_5");
         vm.stopPrank();
+        assert(target.goal() != true);
     }
 
     /*
     ** This check is much faster!
     */
     function check_BannedFunction_enabled() external {
-        vm.startPrank(configurer);
-        glob.add_banned_function_selector(bytes4(keccak256("simulateAndRevert(address,bytes)")));
+        vm.startPrank(getConfigurer());
+        halmosHelpersBanFunctionSelector(bytes4(keccak256("simulateAndRevert(address,bytes)")));
         vm.stopPrank();
-        vm.startPrank(actor);
-        handler.execute_symbolically_all();
-        handler.execute_symbolically_all();
-        handler.execute_symbolically_all();
-        handler.execute_symbolically_all();
-        handler.execute_symbolically_all();
+
+        vm.startPrank(address(actors[0]));
+        executeSymbolicallyAllTargets("check_BannedFunction_enabled_1");
+        executeSymbolicallyAllTargets("check_BannedFunction_enabled_2");
+        executeSymbolicallyAllTargets("check_BannedFunction_enabled_3");
+        executeSymbolicallyAllTargets("check_BannedFunction_enabled_4");
+        executeSymbolicallyAllTargets("check_BannedFunction_enabled_5");
+        vm.stopPrank();
         assert(target.goal() != true);
-        vm.stopPrank();
     }
 }

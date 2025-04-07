@@ -1,34 +1,36 @@
 // SPDX-License-Identifier: GPL-3.0
 
 pragma solidity ^0.8.25;
-
-import "halmos-helpers-lib/GlobalStorage.sol";
-import "halmos-helpers-lib/SymbolicHandler.sol";
+import "halmos-helpers-lib/HalmosHelpers.sol";
 import "./SequenceOf2Target.sol";
 
-contract SequenceOf2 is Test {
-    address configurer = address(0xcafe0000);
-    address actor = address(0xcafe0001);
+contract SequenceOf2 is Test, HalmosHelpers {
+    address deployer = address(0xcafe0000);
 
     SequenceOf2Target target;
-    GlobalStorage glob;
-    SymbolicHandler handler;
+    SymbolicActor[] actors;
 
     function setUp() public {
-        startHoax(configurer, 1 << 80);
+        startHoax(deployer, 1 << 80);
         target = new SequenceOf2Target();
-        glob = new GlobalStorage(configurer);
-        glob.add_addr_name_pair(address(target), "SequenceOf2Target");
-        handler = new SymbolicHandler(actor, glob, configurer);
-        handler.set_symbolic_txs_number(2);
+        vm.stopPrank();
+
+        vm.startPrank(getConfigurer());
+        halmosHelpersInitialize();
+        halmosHelpersRegisterTargetAddress(address(target), "SequenceOf2Target");
+        actors = halmosHelpersGetSymbolicActorArray(1);
         vm.stopPrank();
     }
 
-    function check_SequenceOf2() external {
-        vm.startPrank(actor);
-        handler.execute_symbolically_all();
+    function check_SequenceOf2Unlock() external {
+        halmosHelpersSymbolicBatchStartPrank(actors);
+        executeSymbolicallyAllTargets("check_SequenceOf2Unlock_1");        
+        vm.stopPrank();
+
+        halmosHelpersSymbolicBatchStartPrank(actors);
+        executeSymbolicallyAllTargets("check_SequenceOf2Unlock_2");
+        vm.stopPrank();
 
         assert(target.goal() != true);
-        vm.stopPrank();
     }
 }

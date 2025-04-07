@@ -2,22 +2,18 @@
 
 pragma solidity =0.8.25;
 
-import "halmos-helpers-lib/GlobalStorage.sol";
-import "halmos-helpers-lib/SymbolicHandler.sol";
-import "halmos-helpers-lib/SymbolicHandlerUtils.sol";
+import "halmos-helpers-lib/HalmosHelpers.sol";
 import {SideEntranceLenderPool} from "./SideEntranceLenderPool.sol";
 
-contract SideEntranceChallenge is Test {
+contract SideEntranceChallenge is Test, HalmosHelpers {
     address deployer = address(0xcafe0000);
     address player = address(0xcafe0001);
     address recovery = address(0xcafe0002);
-    address configurer = address(0xcafe0003);
-    SymbolicHandler handler;
+    SymbolicActor[] actors;
 
     uint256 constant ETHER_IN_POOL = 1000e18;
     uint256 constant PLAYER_INITIAL_ETH_BALANCE = 1e18;
 
-    GlobalStorage glob;
     SideEntranceLenderPool pool;
 
     modifier checkSolvedByPlayer() {
@@ -40,21 +36,22 @@ contract SideEntranceChallenge is Test {
         /* 
         ** halmos-helpers-lib setup part
         */
-        vm.startPrank(configurer);
-        glob = new GlobalStorage(configurer);
-        glob.add_addr_name_pair(address(pool), "SideEntranceLenderPool");
-        handler = new SymbolicHandler(player, glob, configurer);
-        
-        handler.set_is_optimistic(true);
-        
+        vm.startPrank(getConfigurer());
+        halmosHelpersInitialize();
+        halmosHelpersRegisterTargetAddress(address(pool), "SideEntranceLenderPool");
+        actors = halmosHelpersGetSymbolicActorArray(1);
+        halmosHelpersSetNoDuplicateCalls(true);
         vm.stopPrank();
     }
 
     function check_sideEntrance() public checkSolvedByPlayer {
-        vm.deal(address(handler), PLAYER_INITIAL_ETH_BALANCE);
+        vm.stopPrank();
+        vm.deal(address(actors[0]), PLAYER_INITIAL_ETH_BALANCE);
         vm.deal(address(player), 0); // Player's ETH is transferred to its handler.
-        handler.execute_symbolically_all();
-        handler.execute_symbolically_all();
+        vm.startPrank(address(actors[0]));
+        executeSymbolicallyAllTargets("check_sideEntrance_1");
+        executeSymbolicallyAllTargets("check_sideEntrance_2");
+        vm.stopPrank();
     }
 
     /**

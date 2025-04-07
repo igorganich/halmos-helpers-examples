@@ -2,6 +2,8 @@
 
 pragma solidity ^0.8.25;
 
+import "forge-std/Test.sol";
+
 contract BannedFunctionTarget {
     bool public goal;
     uint8 private counter;
