@@ -690,22 +690,22 @@ function setVault(address user, address vault) external onlyMarket {
 ```
 ```solidity
 function _transferFrom(address vaultFrom, address vaultTo, address from, address to, uint256 value) private {
-        if (value > 0) {
-            if (vaultFrom == vaultTo) {
-                IAdapter adapter = getWhitelistedVaultAdapter(vaultFrom);
-                adapter.transferFrom(vaultFrom, from, to, value);
-            } else {
-                IAdapter adapterFrom = getWhitelistedVaultAdapter(vaultFrom);
-                IAdapter adapterTo = getWhitelistedVaultAdapter(vaultTo);
-                // slither-disable-next-line unused-return
-                adapterFrom.withdraw(vaultFrom, from, address(adapterTo), value);
-                // slither-disable-next-line unused-return
-                adapterTo.deposit(vaultTo, to, value);
-            }
+    if (value > 0) {
+        if (vaultFrom == vaultTo) {
+            IAdapter adapter = getWhitelistedVaultAdapter(vaultFrom);
+            adapter.transferFrom(vaultFrom, from, to, value);
+        } else {
+            IAdapter adapterFrom = getWhitelistedVaultAdapter(vaultFrom);
+            IAdapter adapterTo = getWhitelistedVaultAdapter(vaultTo);
+            // slither-disable-next-line unused-return
+            adapterFrom.withdraw(vaultFrom, from, address(adapterTo), value);
+            // slither-disable-next-line unused-return
+            adapterTo.deposit(vaultTo, to, value);
         }
     }
+}
 ```
-Note that the `value` parameter in `_transferFrom()` is the result of the `symbolic_vault::balanceOf()` function. We have seen this pattern before. 
+In this path halmos considered the option that `user` is `alice`. So `vaultOf[user]` is `symbolic_vault`. Therefore, the `value` parameter in `_transferFrom()` is the result of the `symbolic_vault::balanceOf()` function. We have seen this pattern before. 
 
 Let's see how halmos handled `setVault()`:
 ```javascript
@@ -719,7 +719,7 @@ CALL 0xaaaa0025::setVault(...) (caller: ERC1967Proxy)
 Again `symbolic_vault::balanceOf()` returned the symbolic value `halmos_fallback_retdata_bytes_5c55208_213`. In this particular path halmos considered the possibility that `halmos_fallback_retdata_bytes_5c55208_213 == 0`. And this literally is the condition of the attack `3.1.1`. 
 
 As a result:
-1. **Alice's** vault has been changed.
+1. `alice's` vault has been changed.
 2. `sharesOf[alice]` has not changed anywhere, it is still `halmos_fallback_retdata_bytes_4d5326b_06`. 
 
 ### Invariant breaking
@@ -836,7 +836,9 @@ function deposit(address vault, address to, uint256 amount) external onlyOwner r
     tokenVault.setSharesOf(to, vars.userSharesBefore + shares);
 }
 ```
-This place is the critical point of the entire attack. Here we have 4 external calls to the **symbolic vault**:
+Similar to the previous scenario, in this path halmos considered the option that `to` is `alice`. So `vault` is `symbolic_vault`.
+
+This place is the critical point of the entire attack. Here we have 4 external calls to the `symbolic_vault`:
 1. view functions (`balanceOf()`, `convertToAssets()`). We already know that they return a symbolic unbounded value. We are only interested in:
     ```solidity
     vars.sharesBefore = IERC4626(vault).balanceOf(address(tokenVault));
