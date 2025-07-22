@@ -2,7 +2,7 @@
 This example is based on [this](https://github.com/SizeCredit/size-solidity/blob/main/audits/2025-06-14-Cantina.pdf) audit report of [size solidity](https://github.com/SizeCredit/size-solidity/) protocol. I suggest you familiarize yourself with the code of this protocol and this audit report, but in this **README** I will still give a superficial description of the vulnerabilities. And then I will tell you how such vulnerabilities can be conveniently caught using halmos-helpers-lib.
 
 ## Vulnerabilities overview
-We are interested in 3 vulnerabilities found, which are based on the assumption that some external contract may have a malicious implementation compromised, which will cause the entire protocol to break.
+We are interested in 3 vulnerabilities found, which are based on the assumption that some external contract may have a malicious implementation, which will cause the entire protocol to break.
 
 To put it very simply: the part of functionality of this protocol allows **users** to work with multiple whitelisted **ERC4626** **vaults** in a unified way, making deposits, withdrawing funds, moving assets from one **vault** to another, etc. For each **user**, one specific **vault** is registered with which he works (`vaultOf[user]`). The protocol itself also stores the number of assets belonging to a particular **user** (`sharesOf[user]`).
 
@@ -117,13 +117,13 @@ So, the conditions are:
     ```
 3. `compromised_vault` inside its `deposit()` function sets **vault** for `to` using `Size::setUserConfigurationOnBehalfOf()`.
 4. `compromised_vault` implements the `convertToAssets()` function, returning any sufficiently large value.
-Thus, user `to` will be able to empty any vault, since
-```solidity
-assets = IERC4626(vault).convertToAssets(shares);
-
-tokenVault.setSharesOf(to, vars.userSharesBefore + shares);
-```
-will give him a huge amount of assets for the `vault`, that he never deposited.
+    Thus, user `to` will be able to empty any vault, since
+    ```solidity
+    assets = IERC4626(vault).convertToAssets(shares);
+    
+    tokenVault.setSharesOf(to, vars.userSharesBefore + shares);
+    ```
+    will give him a huge amount of assets for the `vault`, that he never deposited.
 ### 3.3.3 setVault() DoS
 ```solidity
 contract NonTransferrableRebasingTokenVault {
@@ -165,7 +165,7 @@ contract ERC4626Adapter {
 The essence of this bug is that `compromised_vault` inside `setVault()` can prevent `users` from changing the `vault`. To do this, it only needs to `revert()` at the reading stage of `compromised_vault.balanceOf()`. Thus, `users` will be "blocked" from using the protocol. This is the whole vulnerability.
 
 ## Implementing a symbolic test with halmos-helpers-lib
-In general, the preparation of a halmos symbolic test that could catch such a vulnerability was divided into several stages:
+In general, the preparation of a halmos symbolic test that could catch such a vulnerabilities was divided into several stages:
 1. General setup preparation
 2. Preparation of halmos-helpers
 3. Emulation of a compromised vault using a Symbolic Actor
@@ -422,7 +422,7 @@ function vaultSoladyBalanceNotBrokenInvarint() internal view {
 }
 ```
 
-For vulnerability `3.3.3`, the **invariant** "can `market` aka `size` deliver a valid **vault** to any valid **user**" was chosen:
+For vulnerability `3.3.3`, the **invariant** "can `market` aka `size` set a valid **vault** to any valid **user**" was chosen:
 ```solidity
 /* market should be able to change vault for any valid user */
 address user = _svm.createAddress("user");
@@ -439,7 +439,8 @@ assert(res == true);
 In this section, I will describe the scenarios and vulnerabilities they can detect. The analysis of counterexamples will be in a separate section below.
 
 1. Depth of 1, no reentrancy
-The simplest scenario: let's see what we can get if some **user** simply calls some function from **Size**. In this case, **symbolic vault** "does not know how" to handle non-view functions, which means reentrancy will not occur. At the same time, in this scenario, it can handle `view` functions symbolically:
+
+    The simplest scenario: let's see what we can get if some **user** simply calls some function from **Size**. In this case, **symbolic vault** "does not know how" to handle non-view functions, which means reentrancy will not occur. At the same time, in this scenario, it can handle `view` functions symbolically:
     ```solidity
     function settingUp() internal {
         // Don't process callbacks symbolically during setup
@@ -456,9 +457,11 @@ The simplest scenario: let's see what we can get if some **user** simply calls s
         vaultSoladyBalanceNotBrokenInvarint();
     }
     ```
-    And this is enough to reproduce vulnerability `3.1.1`: **alice** calls `setUserConfigurationOnBehalfOf()` or `setUserConfiguration()` function with appropriate parameters (while `symbolic_vault` returns malicious bytes on view function) and breaks invariant. Analysis of counterexample will be below.
+
+    And this is enough to reproduce vulnerability `3.1.1`: **alice** calls `setUserConfigurationOnBehalfOf()` or `setUserConfiguration()` function with appropriate parameters (while `symbolic_vault` returns malicious bytes on view function) and breaks invariant.
 2. Depth of 1, reentrancy with depth of 1, **NoDuplicateCalls** enabled
-In this scenario, we add the ability to handle `external/public` callbacks for the **symbolic_vault**: it starts executing one function from ``size`` inside of `fallback()`. At the same time, we add the following heuristic: if some function from `size` has already been called in the current path, we do not call it again:
+
+    In this scenario, we add the ability to handle `external/public` callbacks for the `symbolic_vault`: it starts executing one function from ``size`` inside of `fallback()`. At the same time, we add the following heuristic: if some function from `size` has already been called in the current path, we do not call it again:
     ```solidity
     /* Should find 3.1.1 and 3.3.2. Test is still pretty long but shorter than check_BalanceIntegrityWithReentrancyNoDuplicateCallsDisabled */
     function check_BalanceIntegrityWithReentrancyNoDuplicateCallsEnabled() external {
@@ -476,7 +479,8 @@ In this scenario, we add the ability to handle `external/public` callbacks for t
     ```
     This scenario is much more "heavy" to execute symbolically, but you can expect it to complete in half a day on a powerful machine. In addition to the above `3.1.1`, this scenario can detect vulnerability `3.3.2`: after `deposit()`, some symbolic function is called from the `symbolic_vault`, which in turn changes the current `vault` of `alice` via `setUserConfigurationOnBehalfOf ` and breaks `shares` of `alice`.
 3. Depth of 1, reentrancy with depth of 1, **NoDuplicateCalls** disabled
-Essentially the same test as above, but this time we turned off the duplicate function heuristic. It can find the same vulnerabilities, but in different scenarios and takes much longer. I couldn't wait for it to finish on my machine:
+
+    Essentially the same test as above, but this time we turned off the duplicate function heuristic. It can find the same vulnerabilities, but in different scenarios and takes much longer. I couldn't wait for it to finish on my machine:
     ```solidity
     /* Should find 3.1.1 and 3.3.2. Long test */
     function check_BalanceIntegrityWithReentrancyNoDuplicateCallsDisabled() external {
@@ -492,7 +496,8 @@ Essentially the same test as above, but this time we turned off the duplicate fu
     }
     ```
 4. Full test
-Added all known contract addresses in the `setUp()` as targets, increased the test depth to 2, the recursion depth of fallbacks to 2. Also, callbacks will execute 2 functions inside. I don't think such a test can be done in a reasonable amount of time, but it just shows a possible way to extend the test. Any of the previous tests can be extended further incrementally by adding options from the **Full** test:
+
+    Added all known contract addresses in the `setUp()` as targets, increased the test depth to 2, the recursion depth of fallbacks to 2. Also, callbacks will execute 2 functions inside. I don't think such a test can be done in a reasonable amount of time, but it just shows a possible way to extend the test. Any of the previous tests can be extended further     incrementally by adding options from the **Full** test:
     ```solidity
     /* 
     * Theoretically, this test should find 3.1.1 and 3.3.2 in all forms (via reentrancy and trivially) in some time. 
@@ -540,7 +545,8 @@ Added all known contract addresses in the `setUp()` as targets, increased the te
     }
     ```
 5. DoS test
-Separately, I will say that any of the scenarios above easily finds the `3.3.3` vulnerability, since it does not require any transaction before the **invariant** (halmos finds the **DoS** scenario just inside the **invariant** itself).
+
+    Separately, I will say that any of the scenarios above easily finds the `3.3.3` vulnerability, since it does not require any transaction before the **invariant** (halmos finds the **DoS** scenario just inside the **invariant** itself).
 
     This scenario stands out a bit from the others:
     ```solidity
@@ -583,7 +589,6 @@ Before moving on to counterexamples and their analysis, it is worth specifying t
 0xaaaa0029 - size
 0xaaaa002c - adapter
 0xaaaa0025 - Underlying token (USDC)
-...
 ```
 ## 3.1.1 counterexample analysis
 The full halmos log can be found [here](https://gist.github.com/igorganich/22c2f2e24caf10a18db2abf60a4b6c11)
@@ -620,7 +625,7 @@ Counterexample:
 ```
 Let's look at the key points of symbolic execution that allowed halmos to find a counterexample.
 ### SetUp() symbolic shares
-Take a look to this deposit process of alice:
+Take a look to this `deposit()` process of `alice`:
 ```solidity
 vm.startPrank(alice);
 usdc.approve(address(size), USDC_INITIAL_BALANCE);
@@ -642,15 +647,15 @@ function deposit(address vault, address to, uint256 amount) external onlyOwner r
         tokenVault.setSharesOf(to, vars.userSharesBefore + shares);
     }
 ```
-Let's see how the symbolic vault processed the deposit:
+Let's see how the `symbolic_vault` processed the deposit:
 ```javascript
-[36mCALL[0m ERC1967Proxy::deposit(...) (caller: 0xaaaa001c)
+CALL ERC1967Proxy::deposit(...) (caller: 0xaaaa001c)
   ...
-  [36mDELEGATECALL[0m ERC1967Proxy::executeDeposit(...) (caller: 0xaaaa001c)
+  DELEGATECALL ERC1967Proxy::executeDeposit(...) (caller: 0xaaaa001c)
   ...
-     [36mCALL[0m 0xaaaa0025::deposit(...) (caller: ERC1967Proxy)
+     CALL 0xaaaa0025::deposit(...) (caller: ERC1967Proxy)
   ...
-        [36mSTATICCALL[0m 0xaaaa001e::balanceOf(...) (caller: 0xaaaa002c)
+        STATICCALL 0xaaaa001e::balanceOf(...) (caller: 0xaaaa002c)
         ...
         ↩ RETURN halmos_fallback_retdata_bytes_4d5326b_06
 ```
@@ -666,9 +671,9 @@ function check_BalanceIntegrityNoReentrancy() external {
 ...
 ```
 ```javascript
- [36mCALL[0m HalmosSizeTest::check_BalanceIntegrityNoReentrancy() (caller: 0x1804c8ab1f12e6bbf3894d4083f33e07309d1f38)
+ CALL HalmosSizeTest::check_BalanceIntegrityNoReentrancy() (caller: 0x1804c8ab1f12e6bbf3894d4083f33e07309d1f38)
  ...
-    DELEGATECALL[0m ERC1967Proxy::setUserConfigurationOnBehalfOf(Concat(0x00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000040, p_externalParams.onBehalfOf_address_423501a_196, p_externalParams.params.vault_address_a57bb47_189, p_externalParams.params.openingLimitBorrowCR_uint256_36f3b10_190, p_externalParams.params.allCreditPositionsForSaleDisabled_bool_1c01e5f_191, p_externalParams.params.creditPositionIdsForSale_bool_a65f308_192, 0x00000000000000000000000000000000000000000000000000000000000000a0, p_externalParams.params.creditPositionIds_length_a988697_193, p_externalParams.params.creditPositionIds[0]_uint256_0bb68e8_194, p_externalParams.params.creditPositionIds[1]_uint256_30eb88d_195)) (value: halmos_ETH_val_uint256_a531e05_18) (caller: halmos_batch_prank_addr_address_ac8301a_16)
+    DELEGATECALL ERC1967Proxy::setUserConfigurationOnBehalfOf(Concat(0x00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000040, p_externalParams.onBehalfOf_address_423501a_196, p_externalParams.params.vault_address_a57bb47_189, p_externalParams.params.openingLimitBorrowCR_uint256_36f3b10_190, p_externalParams.params.allCreditPositionsForSaleDisabled_bool_1c01e5f_191, p_externalParams.params.creditPositionIdsForSale_bool_a65f308_192, 0x00000000000000000000000000000000000000000000000000000000000000a0, p_externalParams.params.creditPositionIds_length_a988697_193, p_externalParams.params.creditPositionIds[0]_uint256_0bb68e8_194, p_externalParams.params.creditPositionIds[1]_uint256_30eb88d_195)) (value: halmos_ETH_val_uint256_a531e05_18) (caller: halmos_batch_prank_addr_address_ac8301a_16)
 ```   
 Before execution, all parameters are symbolic. As validations, constraints, etc. are processed, these symbolic parameters (including the `prank()` address) become more specific. In the counterexample itself, they are all concrete.
 ### setVault() processing
@@ -702,9 +707,9 @@ Note that the `value` parameter in `_transferFrom()` is the result of the `symbo
 
 Let's see how halmos handled `setVault()`:
 ```javascript
-[36mCALL[0m 0xaaaa0025::setVault(...) (caller: ERC1967Proxy)
+CALL 0xaaaa0025::setVault(...) (caller: ERC1967Proxy)
 ...
-    [36mSTATICCALL[0m 0xaaaa002c::balanceOf(...) [static][0m (caller: 0xaaaa0025)
+    STATICCALL 0xaaaa002c::balanceOf(...) [static][0m (caller: 0xaaaa0025)
     ...
     RETURN Extract(0x1f3f, 0x1e40, halmos_fallback_retdata_bytes_5c55208_213)
     ...
@@ -831,15 +836,16 @@ function deposit(address vault, address to, uint256 amount) external onlyOwner r
 ```
 This place is the critical point of the entire attack. Here we have 4 external calls to the **symbolic vault**:
 1. view functions (`balanceOf()`, `convertToAssets()`). We already know that they return a symbolic unbounded value. We are only interested in:
-```solidity
-vars.sharesBefore = IERC4626(vault).balanceOf(address(tokenVault));
-vars.userSharesBefore = tokenVault.sharesOf(to);
-...
-uint256 shares = IERC4626(vault).balanceOf(address(tokenVault)) - vars.sharesBefore;
-...
-tokenVault.setSharesOf(to, vars.userSharesBefore + shares);
-```
-It's not hard to guess that `tokenVault.setSharesOf()` will take a symbolic value, completely controlled by what the **symbolic vault** returned.
+    ```solidity
+    vars.sharesBefore = IERC4626(vault).balanceOf(address(tokenVault));
+    vars.userSharesBefore = tokenVault.sharesOf(to);
+    ...
+    uint256 shares = IERC4626(vault).balanceOf(address(tokenVault)) - vars.sharesBefore;
+    ...
+    tokenVault.setSharesOf(to, vars.userSharesBefore + shares);
+    ```
+    It's not hard to guess that `tokenVault.setSharesOf()` will take a symbolic value, completely controlled by what the **symbolic vault** returned.
+
 2. non-view `deposit()` function. Inside it does reentrancy and sets up another `vault` for **alice**. We will discuss this in more detail in the next section.
 ### symbolic vault reentrancy processing
 If the `fallback()` processing depth is enabled at least `1`, the **symbolic vault** will start making external calls to all targets (in this case, only **Size**).
@@ -921,7 +927,7 @@ assert(res == true);
 CALL 0xaaaa0025::setVault(Concat(0x000000000000000000000000, halmos_user_address_e855eb4_211, 0x00000000000000000000000000000000000000000000000000000000aaaa002e)) (caller: ERC1967Proxy)
 ```
 This time we have a specific `caller` and a specific `vault`. Only `user` is symbolic, but restricted to not being `0x0` and its current `vault` is not `soladyVault`.
-### call to symbolic_vault::convertToAssets call
+### call to symbolic_vault::convertToAssets()
 In one of the paths halmos considered the possibility that `user` is `alice`, which means you need to call `convertToAssets()` from `alice's` vault, i.e. `symbolic_vault`:
 ```solidity
 contract NonTransferrableRebasingTokenVault {
