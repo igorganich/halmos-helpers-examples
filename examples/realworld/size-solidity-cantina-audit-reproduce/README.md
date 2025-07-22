@@ -370,6 +370,8 @@ function settingUp() internal {
 ```
 
 One of the **vaults** will be the "victim": a regular **ERC4626Solady**, and the other (`symbolic_vault`) will be the "compromised".
+
+`alice's` vault is `symbolic_vault`, `bob's` vault is `vaultSolady`.
 ### Invariants
 For vulnerabilities `3.1.1` and `3.3.2` (both are assets drain), the following invariant was used: we sum all shares of `vaultSolady` contract's **users** and check if this contract has enough **USDC** balance to repay them. If not - the balance is corrupted and somebody probably can drain the **vault**. It is worth noting that we do not consider gaining through **yields** in these scenarios. To do this, I had to add shadow tracking of all assets for a specific vault:
 ```solidity
