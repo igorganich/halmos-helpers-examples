@@ -1,5 +1,7 @@
 # vulnerabilities from cantina's audit report of size-solidity
-This example is based on [this](https://github.com/SizeCredit/size-solidity/blob/main/audits/2025-06-14-Cantina.pdf) audit report of [size solidity](https://github.com/SizeCredit/size-solidity/) protocol. I suggest you familiarize yourself with the code of this protocol and this audit report, but in this **README** I will still give a superficial description of the vulnerabilities. And then I will tell you how such vulnerabilities can be conveniently caught using halmos-helpers-lib.
+This example is based on [this](https://github.com/SizeCredit/size-solidity/blob/main/audits/2025-06-14-Cantina.pdf) audit report of [size solidity](https://github.com/SizeCredit/size-solidity/) protocol. 
+
+I suggest you familiarize yourself with the code of this protocol and this audit report, but in this **README** I will still provide a superficial description of the vulnerabilities. After that, an approach will be given on how such vulnerabilities can be conveniently detected using **halmos-helpers-lib**.
 
 ## Vulnerabilities overview
 We are interested in 3 vulnerabilities found, which are based on the assumption that some external contract may have a malicious implementation, which will cause the entire protocol to break.
