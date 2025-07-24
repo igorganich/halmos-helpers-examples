@@ -1,10 +1,12 @@
-# vulnerabilities from cantina's audit report of size-solidity
-This example is based on [this](https://github.com/SizeCredit/size-solidity/blob/main/audits/2025-06-14-Cantina.pdf) audit report of [size solidity](https://github.com/SizeCredit/size-solidity/) protocol. 
+# Vulnerabilities from Cantina's audit report of the Size Credit protocol v1.8-rc
+
+This example is based on [Cantina's](https://github.com/SizeCredit/size-solidity/blob/main/audits/2025-06-14-Cantina.pdf) audit report of the [Size Credit](https://github.com/SizeCredit/size-solidity/) protocol version [v1.8-rc](https://github.com/SizeCredit/size-solidity/commits/daf1d1d8db21ae7c62df35fcef4f99ed0a914f69).
 
 I suggest you familiarize yourself with the code of this protocol and this audit report, but in this **README** I will still provide a superficial description of the vulnerabilities. After that, an approach will be given on how such vulnerabilities can be conveniently detected using **halmos-helpers-lib**.
 
 ## Vulnerabilities overview
-We are interested in 3 vulnerabilities found, which are based on the assumption that some external contract may have a malicious implementation, which will cause the entire protocol to break.
+
+We are interested in 3 vulnerabilities found and fixed after the audit, which are based on the assumption that some external contract may have a malicious implementation, which will cause the entire protocol to break.
 
 To put it very simply: the part of functionality of this protocol allows **users** to work with multiple whitelisted **ERC4626** **vaults** in a unified way, making deposits, withdrawing funds, moving assets from one **vault** to another, etc. For each **user**, one specific **vault** is registered with which he works (`vaultOf[user]`). The protocol itself also stores the number of assets belonging to a particular **user** (`sharesOf[user]`).
 
