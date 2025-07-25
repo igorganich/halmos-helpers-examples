@@ -9,7 +9,7 @@
     ```javascript
     $ halmos --version
     ```
-    At the moment of writing - the target version is `halmos 0.2.7`
+    At the moment of writing - the target version is `halmos 0.3.0`
 3. Run:
     ```javascript
     $ halmos
